@@ -28,10 +28,12 @@ dashboard_env/
 *.xlsx
 *.xls
 *.parquet
-*.db
 *.sqlite
 *.sqlite3
-!requirements.txt
+
+# SQLite databases (except the app warehouse)
+*.db
+!data_warehouse.db
 
 # Outputs (generated files)
 # outputs/
