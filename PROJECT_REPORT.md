@@ -415,8 +415,8 @@ The key findings are:
 
 ---
 
-*Prepared by: [Author Name]*  
-*Programme: Masters in Data Analytics*  
+*Prepared by: Daniel Gacheru*  
+*Programme: Masters of Science in Computer Science*  
 *Date: May 2026*  
 *Dashboard: [Streamlit Community Cloud — Unified Price Analysis](https://share.streamlit.io)*  
 *Repository: [github.com/gacherudaniel/Unified-Price-Analysis-Naivas-vs-Quickmart](https://github.com/gacherudaniel/Unified-Price-Analysis-Naivas-vs-Quickmart)*
