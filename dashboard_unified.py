@@ -15,9 +15,6 @@ from plotly.subplots import make_subplots
 from datetime import datetime
 import warnings
 from scipy import stats
-from sklearn.cluster import KMeans
-from sklearn.preprocessing import StandardScaler
-from sklearn.ensemble import IsolationForest
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
 warnings.filterwarnings('ignore')
@@ -44,6 +41,10 @@ st.markdown("""
         padding: 15px;
         margin: 10px 0;
         border-radius: 5px;
+        color: #212529 !important;
+    }
+    .highlight-box h4, .highlight-box p, .highlight-box li, .highlight-box strong {
+        color: #212529 !important;
     }
     .winner-box {
         background-color: #d4edda;
@@ -51,6 +52,10 @@ st.markdown("""
         padding: 15px;
         margin: 10px 0;
         border-radius: 5px;
+        color: #212529 !important;
+    }
+    .winner-box h3, .winner-box p, .winner-box li, .winner-box strong {
+        color: #212529 !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -342,7 +347,19 @@ with tab1:
 # TAB 2: BASKET ANALYSIS
 with tab2:
     st.header("🛒 Basket-Level Analysis")
-    st.markdown("**Methodology:** Aggregate all brands, compare total basket cost")
+
+    with st.expander("📋 Methodology", expanded=False):
+        st.markdown("""
+        **How this analysis works:**
+
+        1. **Data collection** — Daily prices for 10 essential goods (aligned to Kenya's CPI basket) are sourced from both Naivas and Quickmart.
+        2. **Averaging across brands** — For each item on each day, prices across *all* available brands are averaged into a single representative price. This reflects the experience of a shopper who picks whichever brand is available.
+        3. **Basket cost** — The 10 item averages are summed to produce a single daily total basket cost per store.
+        4. **Comparison** — The mean basket cost across all observation days is compared between stores.
+        5. **Statistical test** — An independent-samples **t-test** (Welch's) checks whether the observed price difference is statistically significant (α = 0.05).
+
+        > **Limitation:** Because it pools all brands, a store with more budget/economy brands will appear cheaper even if its premium brands are more expensive.
+        """)
     
     # Calculate daily basket costs
     df_daily = df_filtered.groupby(['date', 'store_name', 'basket_item'])['price'].mean().reset_index()
@@ -475,7 +492,20 @@ with tab2:
 # TAB 3: BRAND ANALYSIS
 with tab3:
     st.header("🏷️ Brand-Level Analysis")
-    st.markdown("**Methodology:** Compare prices for SAME brands sold at both stores")
+
+    with st.expander("📋 Methodology", expanded=False):
+        st.markdown("""
+        **How this analysis works:**
+
+        1. **Brand identification** — Brand names are extracted from product names using keyword matching (e.g., "Pembe Maize Flour" → brand = "Pembe").
+        2. **Overlap detection** — For each basket item, the brands stocked at *both* stores are identified. Only these *common brands* are used in the price comparison, which eliminates the effect of different brand mixes.
+        3. **Price comparison** — Average prices for each common brand-item pair are computed per store, then compared.
+        4. **Difference calculation** — Expressed as: *Naivas price − Quickmart price* (negative = Naivas is cheaper).
+        5. **Statistical test** — An independent-samples **t-test** is run per item to check whether the difference is statistically significant (α = 0.05).
+
+        > **Advantage:** Controlling for brand removes selection bias — both stores are compared on a level playing field.
+        > **Limitation:** Requires the same brand at both stores, which can reduce sample size for items with low brand overlap.
+        """)
     
     # Identify common brands
     brand_overlap = []
@@ -762,7 +792,23 @@ with tab3:
 # TAB 4: RECONCILIATION
 with tab4:
     st.header("🔄 Reconciliation: Understanding the Differences")
-    
+
+    with st.expander("📋 Methodology", expanded=False):
+        st.markdown("""
+        **Why the two analyses can give different results — and why both are valid:**
+
+        | | Basket Analysis | Brand Analysis |
+        |---|---|---|
+        | **Unit of comparison** | Total basket cost | Price of identical brand-item |
+        | **Brands included** | All brands (pooled) | Common brands only |
+        | **What drives the result** | Brand mix + pricing | Pricing power alone |
+        | **Most relevant for** | Budget shoppers | Brand-loyal shoppers |
+
+        **Example:** Store A stocks mostly budget brands → lower average basket cost.
+        Store B has better prices on shared premium brands → wins brand analysis.
+        Both findings can be simultaneously true.
+        """)
+
     st.markdown("""
     <div class="highlight-box">
     <h4>🔍 Why Two Analyses Can Show Different Results</h4>
@@ -985,87 +1031,24 @@ with tab6:
     )
     st.plotly_chart(fig_trend, width="stretch")
     
-    # Clustering analysis
-    st.subheader("🎯 Product Clustering by Price Patterns")
-    
-    product_features = df_filtered.groupby(['basket_item', 'store_name']).agg({
-        'price': ['mean', 'std', 'min', 'max', 'count']
-    }).reset_index()
-    
-    product_features.columns = ['item', 'store', 'mean', 'std', 'min', 'max', 'count']
-    product_features['range'] = product_features['max'] - product_features['min']
-    product_features['cv'] = product_features['std'] / product_features['mean']
-    product_features = product_features.fillna(0)
-    
-    # K-Means clustering
-    X = product_features[['mean', 'std', 'cv']].values
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-    
-    n_clusters = st.slider("Number of clusters", 2, 5, 3)
-    
-    kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
-    product_features['cluster'] = kmeans.fit_predict(X_scaled)
-    
-    fig_cluster = px.scatter(
-        product_features,
-        x='mean',
-        y='std',
-        color='cluster',
-        hover_data=['item', 'store'],
-        title='Product Clusters (Price Mean vs Std Dev)',
-        labels={'mean': 'Average Price (KES)', 'std': 'Price Std Dev (KES)'}
-    )
-    fig_cluster.update_layout(height=500)
-    st.plotly_chart(fig_cluster, width="stretch")
-    
-    # Anomaly detection
-    st.subheader("🚨 Price Anomaly Detection")
-    
-    anomaly_method = st.radio(
-        "Select method",
-        ['Statistical (Z-Score)', 'Isolation Forest'],
-        horizontal=True
-    )
-    
-    anomaly_df = df_filtered.copy()
-    item_stats = df_filtered.groupby('basket_item')['price'].agg(['mean', 'std']).reset_index()
-    anomaly_df = anomaly_df.merge(item_stats, on='basket_item')
-    anomaly_df['z_score'] = (anomaly_df['price'] - anomaly_df['mean']) / anomaly_df['std']
-    
-    if anomaly_method == 'Statistical (Z-Score)':
-        threshold = st.slider("Z-Score Threshold", 1.5, 4.0, 2.5, 0.1)
-        anomaly_df['is_anomaly'] = abs(anomaly_df['z_score']) > threshold
-    else:
-        contamination = st.slider("Contamination", 0.01, 0.20, 0.05, 0.01)
-        iso_forest = IsolationForest(contamination=contamination, random_state=42)
-        anomaly_df['is_anomaly'] = iso_forest.fit_predict(anomaly_df[['price']].values) == -1
-    
-    anomalies = anomaly_df[anomaly_df['is_anomaly']]
-    
-    st.info(f"Found **{len(anomalies)}** anomalies")
-    
-    fig_anomaly = px.scatter(
-        anomaly_df,
-        x='date',
-        y='price',
-        color='is_anomaly',
-        hover_data=['basket_item', 'store_name', 'brand'],
-        title='Price Anomalies Over Time',
-        color_discrete_map={True: 'red', False: 'blue'}
-    )
-    fig_anomaly.update_layout(height=400)
-    st.plotly_chart(fig_anomaly, width="stretch")
-    
-    if len(anomalies) > 0:
-        st.subheader("Top Anomalies")
-        top_anomalies = anomalies.nlargest(10, 'z_score', keep='all')[
-            ['date', 'basket_item', 'store_name', 'brand', 'price', 'mean', 'z_score']
-        ]
-        st.dataframe(top_anomalies, width="stretch")
-    
     # Price forecasting
     st.subheader("🔮 Price Forecasting")
+
+    with st.expander("📋 Forecasting Methodology", expanded=False):
+        st.markdown("""
+        **Holt-Winters Exponential Smoothing** forecasts future average prices for a selected item and store.
+
+        - **Data preparation:** Daily average prices are computed by averaging across all brands for the selected item-store pair. Missing days are forward-filled.
+        - **Model:** Triple exponential smoothing (Holt-Winters Additive) — it decomposes prices into three components:
+          - **Level** — the baseline price at any point in time
+          - **Trend** — whether prices are rising or falling over time
+          - **Seasonality** — recurring weekly patterns (period = 7 days)
+        - **Fitting:** Model parameters (α for level, β for trend, γ for seasonality) are optimised automatically via maximum likelihood estimation.
+        - **Output:** The fitted model extrapolates the trend and seasonal pattern forward by the selected number of days.
+        - **Minimum data:** At least 14 daily observations are required to estimate all three components reliably.
+
+        > **Note:** Forecasts assume past patterns continue. Sudden supply shocks, promotions, or seasonal events will not be captured.
+        """)
     
     selected_item_forecast = st.selectbox(
         "Select item for forecasting",
